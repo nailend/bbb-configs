@@ -82,7 +82,7 @@ networks:
       k9-zwingli: 4
       k9-switch-house: 8 # hpe 2520g-poe
       k9-ap-loge: 9
-      k9-ap-hinterhaus: 10
+      k9-ap-groessenwahn: 10
 
 location__ssh_keys__to_merge:
   - comment: k9 iuljan
