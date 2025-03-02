@@ -22,27 +22,71 @@
     mode: "755"
   run_once: true
 
-- name: Set destination path for imagebuilder
-  set_fact:
-    imagebuilder_path: "{{ dl_dir }}/{{ imagebuilder | basename }}"
+# - name: Set destination path for imagebuilder
+#   set_fact:
+#     imagebuilder_path: "{{ dl_dir }}/{{ imagebuilder | basename }}"
 
-- name: Download Imagebuilder if upstream is newer
+# - name: Download Imagebuilder if upstream is newer
+#   get_url:
+#     url: "{{ imagebuilder }}"
+#     dest: "{{ dl_dir }}/{{ imagebuilder_filename }}"
+#     mode: "644"
+#   when: '"http" in imagebuilder'
+
+# # For testing purposes the imagebuilder variable can be replaced with a path to a local file.
+# # This task takes care of using this file instead of trying to download something
+# - name: Copy Local Imagebuilder
+#   command:
+#     argv:
+#       - "cp"
+#       - "{{ imagebuilder }}"
+#       - "{{ dl_dir }}"
+#   when: '"http" not in imagebuilder'
+#   changed_when: true
+
+- name: Check if ImageBuilder file exists
+  stat:
+    path: "{{ dl_dir }}/{{ imagebuilder_filename }}"
+  register: local_file
+
+- name: Compute local checksum
+  command: sha256sum "{{ dl_dir }}/{{ imagebuilder_filename }}"
+  register: local_checksum
+  changed_when: false
+  ignore_errors: true
+  when: local_file.stat.exists
+
+- name: Show checksum
+  debug:
+    msg: "SHA256: {{ local_checksum }}"
+
+- name: Fetch remote sha256sums file
+  uri:
+    url: "{{ imagebuilder | dirname }}/sha256sums"
+    return_content: yes
+  register: remote_sha256sums
+  when: '"http" in imagebuilder'
+
+- name: Show imagebuilder_filename
+  debug:
+    msg: "{{ imagebuilder_filename }}"
+
+- name: Extract remote checksum for ImageBuilder
+  set_fact:
+    remote_checksum: >-
+      {{ (remote_sha256sums.content | regex_search('([a-fA-F0-9]{64}) \\*' ~ imagebuilder_filename, '\\1')) | default('') }}
+  when: '"http" in imagebuilder and remote_sha256sums.content is defined'
+
+- name: Download ImageBuilder if missing or checksum differs
   get_url:
     url: "{{ imagebuilder }}"
     dest: "{{ dl_dir }}/{{ imagebuilder_filename }}"
     mode: "644"
-  when: '"http" in imagebuilder'
-
-# For testing purposes the imagebuilder variable can be replaced with a path to a local file.
-# This task takes care of using this file instead of trying to download something
-- name: Copy Local Imagebuilder
-  command:
-    argv:
-      - "cp"
-      - "{{ imagebuilder }}"
-      - "{{ dl_dir }}"
-  when: '"http" not in imagebuilder'
-  changed_when: true
+  when: >
+    "http" in imagebuilder and (
+      not local_file.stat.exists or
+      remote_checksum is defined and remote_checksum != (local_checksum.stdout.split() | first | default(""))
+    )
 
 - name: Clear workdir
   file:
